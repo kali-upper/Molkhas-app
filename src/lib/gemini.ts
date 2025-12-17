@@ -586,6 +586,20 @@ ${context}
       }
     }
 
+    // Also try to load local data.txt if available (for development)
+    try {
+      console.log('📂 Checking for local data.txt...');
+      const localResponse = await fetch('/data.txt');
+      if (localResponse.ok) {
+        const localText = await localResponse.text();
+        const localChunks = this.parseWhatsAppExport(localText);
+        console.log(`✅ Loaded local data.txt: ${localChunks.length} messages`);
+        totalLoaded += localChunks.length;
+      }
+    } catch (error) {
+      console.log('ℹ️ Local data.txt not available (this is normal in production)');
+    }
+
     const stats = this.getStats();
     console.log('🎉 Data loading complete:', stats);
 
