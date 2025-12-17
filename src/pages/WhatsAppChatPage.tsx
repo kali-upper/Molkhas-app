@@ -145,25 +145,83 @@ export function WhatsAppChatPage({ onNavigate }: WhatsAppChatPageProps) {
     }
   };
 
-  const saveApiKey = () => {
+  const saveApiKey = async () => {
     const trimmedKey = apiKeyInput.trim();
 
     if (!trimmedKey) {
       console.warn("يرجى إدخال مفتاح API صحيح");
+      alert("يرجى إدخال مفتاح API صحيح");
       return;
     }
 
+    // Save immediately to localStorage for instant feedback
+    localStorage.setItem("user_gemini_api_key", trimmedKey);
+    whatsAppAssistant.reinitializeGemini();
+    setShowApiKeyModal(false);
+    setApiKeyInput("");
+
+    console.log("✅ تم حفظ مفتاح API فوراً");
+
+    // Validate in background without blocking the user
+    validateApiKeyInBackground(trimmedKey);
+  };
+
+  const validateApiKeyInBackground = async (apiKey: string) => {
     try {
-      localStorage.setItem("user_gemini_api_key", trimmedKey);
-      whatsAppAssistant.reinitializeGemini();
-      setShowApiKeyModal(false);
-      setApiKeyInput("");
-      console.log("✅ تم حفظ مفتاح API بنجاح");
-    } catch (error) {
-      console.error(
-        "حدث خطأ في حفظ مفتاح API - تأكد من أن المتصفح يدعم localStorage:",
-        error
+      console.log("🔄 جاري التحقق من مفتاح API في الخلفية...");
+
+      // Test the API key with a simple request
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const testGenAI = new GoogleGenerativeAI(apiKey);
+      const testModel = testGenAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+      });
+
+      // Simple test to verify the API key works
+      const testResult = await testModel.generateContent(
+        "Test API key validation"
       );
+      await testResult.response;
+
+      console.log("✅ تم التحقق من صحة مفتاح API بنجاح");
+
+      // Update status to show validation was successful
+      localStorage.setItem("gemini_api_status", "working");
+      localStorage.setItem("gemini_last_test", Date.now().toString());
+    } catch (error: any) {
+      console.error("⚠️ تحذير: مفتاح API قد لا يعمل بشكل صحيح:", error);
+
+      let errorMessage = "تحذير: مفتاح API قد لا يعمل بشكل صحيح. ";
+
+      if (
+        error.message?.includes("API_KEY") ||
+        error.message?.includes("invalid")
+      ) {
+        errorMessage += "المفتاح غير صحيح.";
+      } else if (
+        error.message?.includes("429") ||
+        error.message?.includes("quota")
+      ) {
+        errorMessage += "تم تجاوز حد الاستخدام.";
+      } else if (
+        error.message?.includes("network") ||
+        error.message?.includes("fetch")
+      ) {
+        errorMessage += "مشكلة في الاتصال.";
+      } else {
+        errorMessage += "تحقق من صحة المفتاح.";
+      }
+
+      // Show warning but don't block the user - key is already saved
+      setTimeout(() => {
+        alert(
+          errorMessage +
+            "\n\nالمفتاح تم حفظه لكن قد لا يعمل. يمكنك تجربة استخدامه أو تغييره."
+        );
+      }, 1000);
+
+      // Update status to indicate potential issue
+      localStorage.setItem("gemini_api_status", "error");
     }
   };
 
@@ -171,6 +229,13 @@ export function WhatsAppChatPage({ onNavigate }: WhatsAppChatPageProps) {
     localStorage.removeItem("user_gemini_api_key");
     whatsAppAssistant.reinitializeGemini();
     console.log("تم مسح مفتاح API المخصص والرجوع للمفتاح الافتراضي");
+  };
+
+  const openApiKeyModal = () => {
+    // Load existing API key from localStorage
+    const existingKey = localStorage.getItem("user_gemini_api_key") || "";
+    setApiKeyInput(existingKey);
+    setShowApiKeyModal(true);
   };
 
   if (!hasChatData) {
@@ -255,7 +320,7 @@ export function WhatsAppChatPage({ onNavigate }: WhatsAppChatPageProps) {
               <Trash2 className="w-4 h-4" />
             </button>
             <button
-              onClick={() => setShowApiKeyModal(true)}
+              onClick={openApiKeyModal}
               className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800"
               title="Set custom API key"
             >
@@ -309,8 +374,8 @@ export function WhatsAppChatPage({ onNavigate }: WhatsAppChatPageProps) {
                   كانت الرسائل أوضح كلما أصبحت الإجابات أدق.
                 </p>
                 <p className="text-xs text-gray-400">
-                  (المساعد لا يجيد المزاح أو الهزار ، ويتجنب
-                  الرسائل العشوائية والفارغة)
+                  (المساعد لا يجيد المزاح أو الهزار ، ويتجنب الرسائل العشوائية
+                  والفارغة)
                 </p>
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-500 space-y-2">
